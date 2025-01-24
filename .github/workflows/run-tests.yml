@@ -50,5 +50,5 @@ jobs:
         with:
           files: test-results.xml
           check_name: Unit Test Results
-          comment_mode: create
+          comment_mode: always
           comment_title: Unit Test Results
