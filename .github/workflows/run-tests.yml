@@ -48,7 +48,7 @@ jobs:
       - name: Run GitHub Test Reporter
         uses: ctrf-io/github-test-reporter@v1
         with:
-          test-results-path: test-results.xml
-          coverage-results-path: coverage/lcov.info
-          coverage-type: lcov
-          comment-on-pr: true
+          report-path: test-results.xml
+          summary: true
+          pull-request: true
+          annotate: true
