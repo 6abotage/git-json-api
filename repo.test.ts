@@ -28,6 +28,7 @@ describe("Repo with Mutex", () => {
     await git.addConfig("user.name", "CI User");
     await git.addConfig("user.email", "ci@example.com");
 
+    // Create a file and commit it
     fs.writeFileSync(path.join(testRepoPath, "file1.txt"), "Hello, World!");
     await git.add(".");
     await git.commit("Initial commit");
@@ -35,8 +36,9 @@ describe("Repo with Mutex", () => {
     // Initialize the Repo class with the test repository path
     repo = new Repo(testRepoUri, clonedRepoPath);
 
-    // Configure Git user for the cloned repository
+    // Initialize the cloned repository and configure Git user
     const clonedGit: SimpleGit = simpleGit(clonedRepoPath);
+    await repo.init(); // Clone the repository
     await clonedGit.addConfig("user.name", "CI User");
     await clonedGit.addConfig("user.email", "ci@example.com");
   });
