@@ -35,6 +35,14 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      # Run tests
-      - name: Run tests
-        run: bun test
+      # Install c8 for coverage
+      - name: Install c8
+        run: bun add -D c8
+
+      # Run tests with coverage
+      - name: Run tests with coverage
+        run: bunx c8 bun test
+
+      # Upload coverage report to Codecov (no token needed for public repos)
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
