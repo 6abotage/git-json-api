@@ -12,6 +12,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    # Add permissions for the GITHUB_TOKEN
+    permissions:
+      checks: write
+      pull-requests: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -45,8 +50,9 @@ jobs:
           name: coverage-report
           path: coverage
 
-      - name: Publish Unit Test Results
+      - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
         with:
           files: test-results.xml
           check_name: Unit Test Results
