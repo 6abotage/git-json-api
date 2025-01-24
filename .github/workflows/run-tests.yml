@@ -1,10 +1,10 @@
 name: Test and Coverage Report
 
 on:
-  pull_request:
+  push:
     branches:
       - main
-  push:
+  pull_request:
     branches:
       - main
 
@@ -45,10 +45,10 @@ jobs:
           name: coverage-report
           path: coverage
 
-      - name: Run GitHub Test Reporter
-        uses: ctrf-io/github-test-reporter@v1
+      - name: Publish Unit Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2
         with:
-          report-path: test-results.xml
-          summary: true
-          pull-request: true
-          annotate: true
+          files: test-results.xml
+          check_name: Unit Test Results
+          comment_mode: create
+          comment_title: Unit Test Results
