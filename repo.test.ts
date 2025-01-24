@@ -93,10 +93,19 @@ describe("Repo with Mutex", () => {
 
   test("checkoutCommit should checkout a specific commit", async () => {
     await repo.init();
-    const commitHash: string = await repo.getCommitHash("main");
+    const git = simpleGit(clonedRepoPath);
+
+    // Get the default branch name dynamically
+    const branchSummary = await git.branch();
+    const defaultBranch = branchSummary.current;
+
+    // Get the latest commit hash for the default branch
+    const commitHash: string = await repo.getCommitHash(defaultBranch);
+
+    // Checkout the commit
     await repo.checkoutCommit(commitHash);
 
-    const git: SimpleGit = simpleGit(clonedRepoPath);
+    // Verify the checkout
     const log = await git.log();
     expect(log.latest?.hash).toBe(commitHash);
   });

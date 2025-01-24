@@ -41,8 +41,14 @@ describe("Hono API", () => {
   });
 
   test("GET /commit-hash/:version should return the latest commit hash", async () => {
+    // Get the default branch name dynamically
+    const git = simpleGit(clonedRepoPath);
+    const branchSummary = await git.branch();
+    const defaultBranch = branchSummary.current;
+
+    // Make the request using the default branch name
     const res = await app.fetch(
-      new Request("http://localhost/commit-hash/main")
+      new Request(`http://localhost/commit-hash/${defaultBranch}`)
     );
     expect(res.status).toBe(200);
     const data = await res.json();
