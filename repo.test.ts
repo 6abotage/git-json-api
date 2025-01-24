@@ -22,6 +22,11 @@ describe("Repo with Mutex", () => {
     // Initialize a Git repository in the temporary directory
     const git = simpleGit(testRepoPath);
     await git.init();
+
+    // Configure Git user
+    await git.addConfig("user.name", "CI User");
+    await git.addConfig("user.email", "ci@example.com");
+
     fs.writeFileSync(path.join(testRepoPath, "file1.txt"), "Hello, World!");
     await git.add(".");
     await git.commit("Initial commit");
