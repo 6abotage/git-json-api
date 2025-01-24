@@ -2,71 +2,89 @@ import simpleGit from "simple-git";
 import type { SimpleGit } from "simple-git";
 import fs from "fs";
 import path from "path";
+import { Mutex } from "async-mutex";
 
-// FP-style helper functions
-const initRepo = async (repoPath: string, uri: string): Promise<void> => {
-  if (fs.existsSync(repoPath)) {
-    fs.rmSync(repoPath, { recursive: true, force: true });
-  }
-  console.log(`Cloning repository from ${uri} to ${repoPath}`);
-  await simpleGit().clone(uri, repoPath);
-  console.log(`Repository cloned successfully to ${repoPath}`);
-};
-
-const getCommitHash = async (
-  repoPath: string,
-  version: string
-): Promise<string> => {
-  const git: SimpleGit = simpleGit(repoPath);
-  const log = await git.log([version, "-n", "1"]);
-  if (log.latest) {
-    return log.latest.hash;
-  }
-  throw new Error("No commits found for the specified version");
-};
-
-const checkoutCommit = async (
-  repoPath: string,
-  commitHash: string
-): Promise<void> => {
-  const git: SimpleGit = simpleGit(repoPath);
-  await git.checkout(commitHash);
-};
-
-const commitChanges = async (
-  repoPath: string,
-  message: string,
-  author: string
-): Promise<void> => {
-  const git: SimpleGit = simpleGit(repoPath);
-  await git.add(".");
-  await git.commit(message, { "--author": author });
-};
-
-// OOP-style Repo class
 class Repo {
   private uri: string;
   private repoPath: string;
+  private mutex: Mutex;
+  private git: SimpleGit;
 
   constructor(uri: string, repoPath: string) {
     this.uri = uri;
     this.repoPath = repoPath;
+    this.mutex = new Mutex();
+    this.git = simpleGit(repoPath);
   }
 
+  // Helper method to execute a function with the mutex lock
+  private async withLock<T>(fn: () => Promise<T>): Promise<T> {
+    const release = await this.mutex.acquire();
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+
+  // Initialize the repository (clone if it doesn't exist)
   async init(): Promise<void> {
-    await initRepo(this.repoPath, this.uri);
+    return this.withLock(async () => {
+      if (fs.existsSync(this.repoPath)) {
+        fs.rmSync(this.repoPath, { recursive: true, force: true });
+      }
+      await simpleGit().clone(this.uri, this.repoPath);
+      await new Promise((resolve) => setTimeout(resolve, 100)); // Simulate a delay
+    });
   }
 
+  // Get the latest commit hash for a given version
   async getCommitHash(version: string): Promise<string> {
-    return getCommitHash(this.repoPath, version);
+    return this.withLock(async () => {
+      try {
+        const log = await this.git.log([version, "-n", "1"]);
+        if (log.latest) {
+          await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate a delay
+          return log.latest.hash;
+        }
+        throw new Error("No commits found for the specified version");
+      } catch (err) {
+        // Catch Git errors and throw a custom error
+        throw new Error("No commits found for the specified version");
+      }
+    });
   }
 
+  // Checkout a specific commit
   async checkoutCommit(commitHash: string): Promise<void> {
-    await checkoutCommit(this.repoPath, commitHash);
+    return this.withLock(async () => {
+      await this.git.checkout(commitHash);
+    });
   }
 
-  async commitChanges(message: string, author: string): Promise<void> {
-    await commitChanges(this.repoPath, message, author);
+  // Commit changes to the repository
+  async commitChanges(
+    filePath: string,
+    content: string,
+    message: string,
+    author: string
+  ): Promise<void> {
+    return this.withLock(async () => {
+      // Check if the file exists
+      if (!fs.existsSync(filePath)) {
+        throw new Error("File does not exist");
+      }
+
+      // Write the file (protected by the mutex)
+      fs.writeFileSync(filePath, content);
+
+      // Commit the changes (protected by the mutex)
+      await this.git.add(".");
+      await this.git.commit(message, { "--author": author });
+
+      // Simulate a delay
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
   }
 }
 

@@ -12,6 +12,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "async-mutex": "^0.5.0",
     "hono": "^4.6.18",
     "simple-git": "^3.27.0"
   }

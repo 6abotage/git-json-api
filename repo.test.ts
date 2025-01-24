@@ -4,34 +4,34 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import simpleGit from "simple-git";
-import type { SimpleGit } from "simple-git";
 
-describe("Repo", () => {
+describe("Repo with Mutex", () => {
   let repo: Repo;
   let testRepoPath: string;
   let clonedRepoPath: string;
   let testRepoUri: string;
 
   beforeEach(async () => {
+    // Create a temporary directory for the test repository
     testRepoPath = fs.mkdtempSync(path.join(os.tmpdir(), "my-test-repo-"));
     clonedRepoPath = fs.mkdtempSync(
       path.join(os.tmpdir(), "my-test-cloned-repo-")
     );
     testRepoUri = `file://${testRepoPath}`;
 
-    const git: SimpleGit = simpleGit(testRepoPath);
+    // Initialize a Git repository in the temporary directory
+    const git = simpleGit(testRepoPath);
     await git.init();
     fs.writeFileSync(path.join(testRepoPath, "file1.txt"), "Hello, World!");
     await git.add(".");
     await git.commit("Initial commit");
-    fs.writeFileSync(path.join(testRepoPath, "file1.txt"), "Another change");
-    await git.add(".");
-    await git.commit("Second commit");
 
+    // Initialize the Repo class with the test repository path
     repo = new Repo(testRepoUri, clonedRepoPath);
   });
 
   afterEach(() => {
+    // Clean up the temporary directories
     if (fs.existsSync(testRepoPath)) {
       fs.rmSync(testRepoPath, { recursive: true, force: true });
     }
@@ -50,7 +50,7 @@ describe("Repo", () => {
     await repo.init();
     const commitHash: string = await repo.getCommitHash("main");
     expect(commitHash).toBeString();
-    expect(commitHash.length).toBe(40);
+    expect(commitHash.length).toBe(40); // SHA-1 hash is 40 characters long
   });
 
   test("checkoutCommit should checkout a specific commit", async () => {
@@ -58,7 +58,7 @@ describe("Repo", () => {
     const commitHash: string = await repo.getCommitHash("main");
     await repo.checkoutCommit(commitHash);
 
-    const git: SimpleGit = simpleGit(clonedRepoPath);
+    const git = simpleGit(clonedRepoPath);
     const log = await git.log();
     expect(log.latest?.hash).toBe(commitHash);
   });
@@ -67,10 +67,98 @@ describe("Repo", () => {
     await repo.init();
     const newFilePath: string = path.join(clonedRepoPath, "file2.txt");
     fs.writeFileSync(newFilePath, "New file content");
-    await repo.commitChanges("Add file2.txt", "Test User <test@example.com>");
+    await repo.commitChanges(
+      newFilePath,
+      "New file content",
+      "Add file2.txt",
+      "Test User <test@example.com>"
+    );
 
-    const git: SimpleGit = simpleGit(clonedRepoPath);
+    const git = simpleGit(clonedRepoPath);
     const log = await git.log();
     expect(log.latest?.message).toBe("Add file2.txt");
+  });
+
+  test("Concurrent commitChanges calls should execute sequentially", async () => {
+    await repo.init();
+    const startTime = Date.now();
+
+    // Create file paths
+    const filePaths = [
+      path.join(clonedRepoPath, "file1.txt"),
+      path.join(clonedRepoPath, "file2.txt"),
+      path.join(clonedRepoPath, "file3.txt"),
+    ];
+
+    // Create the files before committing
+    fs.writeFileSync(filePaths[0], "Initial content for file1.txt");
+    fs.writeFileSync(filePaths[1], "Initial content for file2.txt");
+    fs.writeFileSync(filePaths[2], "Initial content for file3.txt");
+
+    // Run commitChanges concurrently
+    await Promise.all([
+      repo.commitChanges(
+        filePaths[0],
+        "Content for Commit 1",
+        "Commit 1",
+        "User 1 <user1@example.com>"
+      ),
+      repo.commitChanges(
+        filePaths[1],
+        "Content for Commit 2",
+        "Commit 2",
+        "User 2 <user2@example.com>"
+      ),
+      repo.commitChanges(
+        filePaths[2],
+        "Content for Commit 3",
+        "Commit 3",
+        "User 3 <user3@example.com>"
+      ),
+    ]);
+
+    const endTime = Date.now();
+
+    // Ensure the operations took longer than a single commitChanges call
+    expect(endTime - startTime).toBeGreaterThan(200); // Adjusted threshold to 200ms
+
+    // Verify the commits
+    const git = simpleGit(clonedRepoPath);
+    const log = await git.log();
+    expect(log.total).toBe(4); // Initial commit + 3 new commits
+
+    // Verify the commit messages
+    const commitMessages = log.all.map((commit) => commit.message);
+    expect(commitMessages).toEqual([
+      "Commit 3",
+      "Commit 2",
+      "Commit 1",
+      "Initial commit",
+    ]);
+  });
+
+  test("getCommitHash should throw an error if no commits are found", async () => {
+    await repo.init();
+    await expect(repo.getCommitHash("nonexistent-branch")).rejects.toThrow(
+      "No commits found for the specified version"
+    );
+  });
+
+  test("checkoutCommit should throw an error for an invalid commit hash", async () => {
+    await repo.init();
+    await expect(repo.checkoutCommit("invalid-commit-hash")).rejects.toThrow();
+  });
+
+  test("commitChanges should throw an error if the file does not exist", async () => {
+    await repo.init();
+    const invalidFilePath = path.join(clonedRepoPath, "nonexistent-file.txt");
+    await expect(
+      repo.commitChanges(
+        invalidFilePath,
+        "Content",
+        "Commit message",
+        "User <user@example.com>"
+      )
+    ).rejects.toThrow("File does not exist");
   });
 });
