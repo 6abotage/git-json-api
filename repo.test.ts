@@ -5,6 +5,7 @@ import path from "path";
 import os from "os";
 import simpleGit from "simple-git";
 import type { SimpleGit } from "simple-git";
+import { GitConfigScope } from "simple-git";
 
 describe("Repo with Mutex", () => {
   let repo: Repo;
@@ -25,8 +26,13 @@ describe("Repo with Mutex", () => {
     await git.init();
 
     // Configure Git user for the test repository
-    await git.addConfig("user.name", "CI User");
-    await git.addConfig("user.email", "ci@example.com");
+    await git.addConfig("user.name", "CI User", true, GitConfigScope.global);
+    await git.addConfig(
+      "user.email",
+      "ci@example.com",
+      true,
+      GitConfigScope.global
+    );
 
     // Create a file and commit it
     fs.writeFileSync(path.join(testRepoPath, "file1.txt"), "Hello, World!");
@@ -36,11 +42,27 @@ describe("Repo with Mutex", () => {
     // Initialize the Repo class with the test repository path
     repo = new Repo(testRepoUri, clonedRepoPath);
 
-    // Initialize the cloned repository and configure Git user
-    const clonedGit: SimpleGit = simpleGit(clonedRepoPath);
+    // Initialize the cloned repository
     await repo.init(); // Clone the repository
-    await clonedGit.addConfig("user.name", "CI User");
-    await clonedGit.addConfig("user.email", "ci@example.com");
+
+    // Check if global Git config has user.name and user.email, and set them if not
+    const globalConfig = await simpleGit().listConfig();
+    if (!globalConfig.all["user.name"]) {
+      await simpleGit().addConfig(
+        "user.name",
+        "CI User",
+        true,
+        GitConfigScope.global
+      );
+    }
+    if (!globalConfig.all["user.email"]) {
+      await simpleGit().addConfig(
+        "user.email",
+        "ci@example.com",
+        true,
+        GitConfigScope.global
+      );
+    }
   });
 
   afterEach(() => {
