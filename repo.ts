@@ -8,7 +8,9 @@ const initRepo = async (repoPath: string, uri: string): Promise<void> => {
   if (fs.existsSync(repoPath)) {
     fs.rmSync(repoPath, { recursive: true, force: true });
   }
+  console.log(`Cloning repository from ${uri} to ${repoPath}`);
   await simpleGit().clone(uri, repoPath);
+  console.log(`Repository cloned successfully to ${repoPath}`);
 };
 
 const getCommitHash = async (

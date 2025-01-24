@@ -1,5 +1,5 @@
 import { expect, test, describe, beforeEach, afterEach } from "bun:test";
-import Repo from "./repo.ts"; // Update the import to .ts
+import Repo from "./repo";
 import fs from "fs";
 import path from "path";
 import os from "os";
