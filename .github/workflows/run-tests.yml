@@ -1,48 +1,51 @@
-name: Run Tests
+name: Test and Coverage Report
 
-# Trigger the workflow on push or pull request to the main branch
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
 
-# Define the jobs to run
 jobs:
   test:
     runs-on: ubuntu-latest
 
     steps:
-      # Check out the repository
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Set up Node.js (Bun is compatible with Node.js)
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 18 # Use Node.js 18 (or the version you're using)
+          node-version: 18
 
-      # Install Bun
       - name: Install Bun
         run: |
           curl -fsSL https://bun.sh/install | bash
           echo "$HOME/.bun/bin" >> $GITHUB_PATH
 
-      # Install dependencies
       - name: Install dependencies
         run: bun install
 
-      # Install c8 for coverage
-      - name: Install c8
-        run: bun add -D c8
-
-      # Run tests with coverage
       - name: Run tests with coverage
-        run: bunx c8 bun test
+        run: |
+          bun test --coverage --coverage-reporter=lcov --reporter=junit > test-results.xml
 
-      # Upload coverage report to Codecov (no token needed for public repos)
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results
+          path: test-results.xml
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: coverage
+
+      - name: Run GitHub Test Reporter
+        uses: ctrf-io/github-test-reporter@v1
+        with:
+          test-results-path: test-results.xml
+          coverage-results-path: coverage/lcov.info
+          coverage-type: lcov
+          comment-on-pr: true
