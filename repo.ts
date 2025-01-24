@@ -48,15 +48,18 @@ class Repo {
         const branchSummary = await git.branch();
         console.debug(`Available branches: ${branchSummary.all.join(", ")}`);
 
+        // If no version is provided, use the default branch
+        const targetVersion = version || branchSummary.current;
+
         // Fetch the latest commit for the specified version (branch or tag)
-        const log = await git.log([version, "-n", "1"]);
+        const log = await git.log([targetVersion, "-n", "1"]);
         if (log.latest) {
           // Artificial delay for mutex testing (only in test environments)
           if (process.env.NODE_ENV === "test") {
             await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate a delay
           }
           console.debug(
-            `Latest commit hash for ${version}: ${log.latest.hash}`
+            `Latest commit hash for ${targetVersion}: ${log.latest.hash}`
           );
           return log.latest.hash;
         }

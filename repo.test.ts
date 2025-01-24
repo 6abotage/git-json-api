@@ -83,7 +83,10 @@ describe("Repo with Mutex", () => {
 
   test("getCommitHash should return the latest commit hash", async () => {
     await repo.init();
-    const commitHash: string = await repo.getCommitHash("main");
+    const git = simpleGit(clonedRepoPath);
+    const branchSummary = await git.branch();
+    const defaultBranch = branchSummary.current; // Use the default branch
+    const commitHash: string = await repo.getCommitHash(defaultBranch);
     expect(commitHash).toBeString();
     expect(commitHash.length).toBe(40); // SHA-1 hash is 40 characters long
   });
