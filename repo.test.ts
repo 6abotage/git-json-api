@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import simpleGit from "simple-git";
+import type { SimpleGit } from "simple-git";
 
 describe("Repo with Mutex", () => {
   let repo: Repo;
@@ -20,10 +21,10 @@ describe("Repo with Mutex", () => {
     testRepoUri = `file://${testRepoPath}`;
 
     // Initialize a Git repository in the temporary directory
-    const git = simpleGit(testRepoPath);
+    const git: SimpleGit = simpleGit(testRepoPath);
     await git.init();
 
-    // Configure Git user
+    // Configure Git user for the test repository
     await git.addConfig("user.name", "CI User");
     await git.addConfig("user.email", "ci@example.com");
 
@@ -33,6 +34,11 @@ describe("Repo with Mutex", () => {
 
     // Initialize the Repo class with the test repository path
     repo = new Repo(testRepoUri, clonedRepoPath);
+
+    // Configure Git user for the cloned repository
+    const clonedGit: SimpleGit = simpleGit(clonedRepoPath);
+    await clonedGit.addConfig("user.name", "CI User");
+    await clonedGit.addConfig("user.email", "ci@example.com");
   });
 
   afterEach(() => {
@@ -63,7 +69,7 @@ describe("Repo with Mutex", () => {
     const commitHash: string = await repo.getCommitHash("main");
     await repo.checkoutCommit(commitHash);
 
-    const git = simpleGit(clonedRepoPath);
+    const git: SimpleGit = simpleGit(clonedRepoPath);
     const log = await git.log();
     expect(log.latest?.hash).toBe(commitHash);
   });
@@ -79,7 +85,7 @@ describe("Repo with Mutex", () => {
       "Test User <test@example.com>"
     );
 
-    const git = simpleGit(clonedRepoPath);
+    const git: SimpleGit = simpleGit(clonedRepoPath);
     const log = await git.log();
     expect(log.latest?.message).toBe("Add file2.txt");
   });
@@ -128,7 +134,7 @@ describe("Repo with Mutex", () => {
     expect(endTime - startTime).toBeGreaterThan(200); // Adjusted threshold to 200ms
 
     // Verify the commits
-    const git = simpleGit(clonedRepoPath);
+    const git: SimpleGit = simpleGit(clonedRepoPath);
     const log = await git.log();
     expect(log.total).toBe(4); // Initial commit + 3 new commits
 
