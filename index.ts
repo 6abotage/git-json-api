@@ -3,43 +3,93 @@ import Repo from "./repo";
 import fs from "fs";
 import path from "path";
 import os from "os";
-import simpleGit from "simple-git";
+import type { Context } from "hono";
 
-// Create a new Hono app
-const app = new Hono();
+// Configuration interface
+interface AppConfig {
+  REPO_URI: string;
+  CLONE_PATH: string;
+}
 
-// Initialize the Repo class with a dynamic repository path
-const testRepoPath = fs.mkdtempSync(path.join(os.tmpdir(), "test-repo-"));
-const clonedRepoPath = fs.mkdtempSync(
-  path.join(os.tmpdir(), "test-cloned-repo-")
-);
+// Custom context type
+type AppContext = Context<{ Variables: { repo: Repo } }>;
 
-// Initialize a Git repository in the temporary directory
-const git = simpleGit(testRepoPath);
-await git.init();
-fs.writeFileSync(path.join(testRepoPath, "file1.txt"), "Hello, World!");
-await git.add(".");
-await git.commit("Initial commit");
+// Create Hono app with proper typing
+const app = new Hono<{ Variables: { repo: Repo } }>();
 
-// Initialize the Repo class with the test repository path
-const repo = new Repo(`file://${testRepoPath}`, clonedRepoPath);
-await repo.init().catch((err) => {
-  console.error("Failed to initialize repository:", err);
+// Middleware for repo initialization
+app.use("*", async (c, next) => {
+  if (!c.get("repo")) {
+    try {
+      const config = getConfig();
+      const repo = await initializeRepo(config);
+      c.set("repo", repo);
+    } catch (error) {
+      return c.json(
+        { error: "Repository initialization failed", details: error.message },
+        500
+      );
+    }
+  }
+  await next();
 });
 
-// Define a route to get the latest commit hash
-app.get("/commit-hash/:version", async (c) => {
-  const version = c.req.param("version"); // e.g., "main" or a commit hash
+// Configuration loader
+function getConfig(): AppConfig {
+  const REPO_URI = process.env.REPO_URI || createTempRepo();
+  const CLONE_PATH =
+    process.env.CLONE_PATH ||
+    fs.mkdtempSync(path.join(os.tmpdir(), "repo-clone-"));
+
+  return { REPO_URI, CLONE_PATH };
+}
+
+// Temporary repo creation for development
+function createTempRepo(): string {
+  const tempRepoPath = fs.mkdtempSync(path.join(os.tmpdir(), "temp-repo-"));
+  const git = simpleGit(tempRepoPath);
+
+  fs.writeFileSync(path.join(tempRepoPath, "README.md"), "# Temp Repo");
+  git.init();
+  git.add(".");
+  git.commit("Initial commit");
+
+  return `file://${tempRepoPath}`;
+}
+
+// Repo initialization
+async function initializeRepo(config: AppConfig): Promise<Repo> {
+  const repo = new Repo(config.REPO_URI, config.CLONE_PATH);
+  await repo.init();
+  return repo;
+}
+
+// Commit hash endpoint
+app.get("/commit-hash/:version", async (c: AppContext) => {
+  const version = c.req.param("version");
+  const repo = c.get("repo");
+
   try {
     const commitHash = await repo.getCommitHash(version);
-    return c.json({ commitHash });
-  } catch (err) {
-    return c.json({ error: err.message }, 500);
+    return c.json({ version, commitHash });
+  } catch (error) {
+    return c.json(
+      { error: "Failed to get commit hash", details: error.message },
+      400
+    );
   }
 });
 
-// Start the server
+// Health check endpoint
+app.get("/health", (c) => c.json({ status: "ok" }));
+
+// Error handling middleware
+app.onError((err, c) => {
+  console.error("Application error:", err);
+  return c.json({ error: "Internal server error" }, 500);
+});
+
 export default {
-  port: 3000,
+  port: process.env.PORT || 3000,
   fetch: app.fetch,
 };
