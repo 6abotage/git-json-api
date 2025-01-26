@@ -2,17 +2,20 @@ import simpleGit, { type SimpleGit, type GitConfigScope } from "simple-git";
 import fs from "fs";
 import path from "path";
 import { Mutex } from "async-mutex";
+import type { Cache } from "./cache";
 
 class Repo {
   private uri: string;
   private repoPath: string;
   private mutex: Mutex;
   private git: SimpleGit;
+  private cache: Cache;
 
-  constructor(uri: string, repoPath: string) {
+  constructor(uri: string, repoPath: string, cache: Cache) {
     this.uri = uri;
     this.repoPath = repoPath;
     this.mutex = new Mutex();
+    this.cache = cache;
     this.git = simpleGit(repoPath);
   }
 
@@ -38,11 +41,24 @@ class Repo {
       try {
         const branchSummary = await this.git.branch();
         const targetVersion = version || branchSummary.current;
-        const log = await this.git.log([targetVersion, "-n", "1"]);
+        const cacheKey = `commit:${targetVersion}`;
+
+        // Check cache first
+        const cachedHash = await this.cache.get(cacheKey);
+        if (cachedHash) return cachedHash;
+
+        // Fetch latest changes from origin
+        await this.git.fetch("origin");
+
+        // Get latest commit from remote branch
+        const log = await this.git.log([`origin/${targetVersion}`, "-n", "1"]);
 
         if (!log.latest) {
           throw new Error(`No commits found for '${targetVersion}'`);
         }
+
+        // Update cache
+        await this.cache.set(cacheKey, log.latest.hash);
 
         return log.latest.hash;
       } catch (error) {

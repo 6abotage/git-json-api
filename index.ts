@@ -4,11 +4,13 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import type { Context } from "hono";
+import { MemoryCache } from "./cache";
+import type { Cache } from "./cache";
 
-// Configuration interface
 interface AppConfig {
   REPO_URI: string;
   CLONE_PATH: string;
+  CACHE_TTL: number;
 }
 
 // Custom context type
@@ -36,14 +38,14 @@ app.use("*", async (c, next) => {
 
 // Configuration loader
 function getConfig(): AppConfig {
-  const REPO_URI = process.env.REPO_URI || createTempRepo();
-  const CLONE_PATH =
-    process.env.CLONE_PATH ||
-    fs.mkdtempSync(path.join(os.tmpdir(), "repo-clone-"));
-
-  return { REPO_URI, CLONE_PATH };
+  return {
+    REPO_URI: process.env.REPO_URI || createTempRepo(),
+    CLONE_PATH:
+      process.env.CLONE_PATH ||
+      fs.mkdtempSync(path.join(os.tmpdir(), "repo-clone-")),
+    CACHE_TTL: parseInt(process.env.CACHE_TTL || "300"), // 5 minutes default
+  };
 }
-
 // Temporary repo creation for development
 function createTempRepo(): string {
   const tempRepoPath = fs.mkdtempSync(path.join(os.tmpdir(), "temp-repo-"));
@@ -59,7 +61,8 @@ function createTempRepo(): string {
 
 // Repo initialization
 async function initializeRepo(config: AppConfig): Promise<Repo> {
-  const repo = new Repo(config.REPO_URI, config.CLONE_PATH);
+  const cache = new MemoryCache(config.CACHE_TTL);
+  const repo = new Repo(config.REPO_URI, config.CLONE_PATH, cache);
   await repo.init();
   return repo;
 }

@@ -4,28 +4,35 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import simpleGit, { type SimpleGit } from "simple-git";
+import { MemoryCache } from "./cache";
 
 describe("Repo", () => {
   let repo: Repo;
   let testRepoPath: string;
   let clonedRepoPath: string;
   let testRepoUri: string;
+  let testRepoGit: SimpleGit;
 
   beforeEach(async () => {
     testRepoPath = fs.mkdtempSync(path.join(os.tmpdir(), "test-repo-"));
     clonedRepoPath = fs.mkdtempSync(path.join(os.tmpdir(), "cloned-repo-"));
     testRepoUri = `file://${testRepoPath}`;
 
-    const git = simpleGit(testRepoPath);
-    await git.init();
-    await git.addConfig("user.name", "Test User", true, "global");
-    await git.addConfig("user.email", "test@example.com", true, "global");
+    testRepoGit = simpleGit(testRepoPath);
+    await testRepoGit.init();
+    await testRepoGit.addConfig("user.name", "Test User", true, "global");
+    await testRepoGit.addConfig(
+      "user.email",
+      "test@example.com",
+      true,
+      "global"
+    );
 
     fs.writeFileSync(path.join(testRepoPath, "file1.txt"), "Initial content");
-    await git.add(".");
-    await git.commit("Initial commit");
+    await testRepoGit.add(".");
+    await testRepoGit.commit("Initial commit");
 
-    repo = new Repo(testRepoUri, clonedRepoPath);
+    repo = new Repo(testRepoUri, clonedRepoPath, new MemoryCache(60));
     await repo.init();
   });
 
@@ -72,20 +79,10 @@ describe("Repo", () => {
     const filePath = path.join(clonedRepoPath, "counter.txt");
     fs.writeFileSync(filePath, "0");
 
-    const modifyCounter = async (value: string) => {
-      const current = fs.readFileSync(filePath, "utf-8");
-      await repo.commitChanges(
-        filePath,
-        value,
-        `Set to ${value}`,
-        "User <u@test.com>"
-      );
-    };
-
     await Promise.all([
-      modifyCounter("1"),
-      modifyCounter("2"),
-      modifyCounter("3"),
+      repo.commitChanges(filePath, "1", "Commit 1", "User <u@test.com>"),
+      repo.commitChanges(filePath, "2", "Commit 2", "User <u@test.com>"),
+      repo.commitChanges(filePath, "3", "Commit 3", "User <u@test.com>"),
     ]);
 
     const finalContent = fs.readFileSync(filePath, "utf-8");
@@ -93,12 +90,13 @@ describe("Repo", () => {
     const commits = (await git.log()).all.map((c) => c.message);
 
     // Verify all commits were processed
-    expect(commits).toContain("Set to 1");
-    expect(commits).toContain("Set to 2");
-    expect(commits).toContain("Set to 3");
+    expect(commits).toContain("Commit 1");
+    expect(commits).toContain("Commit 2");
+    expect(commits).toContain("Commit 3");
 
-    // Verify final state is one of the possible values
-    expect(["1", "2", "3"]).toContain(finalContent);
+    // Verify final state reflects last write wins due to mutex ordering
+    expect(finalContent).toBe("3");
+    expect((await git.log()).total).toBe(4); // Initial + 3 commits
   });
 
   test("should create directories for new files", async () => {
@@ -110,5 +108,40 @@ describe("Repo", () => {
       "User <u@test.com>"
     );
     expect(fs.existsSync(filePath)).toBe(true);
+  });
+
+  describe("Caching", () => {
+    test("should return cached commit hash", async () => {
+      const cache = new MemoryCache(60);
+      const repo = new Repo(testRepoUri, clonedRepoPath, cache);
+
+      const hash1 = await repo.getCommitHash("main");
+      const hash2 = await repo.getCommitHash("main");
+
+      expect(hash1).toBe(hash2);
+    });
+
+    test("should refresh cache after expiration", async () => {
+      const cache = new MemoryCache(1);
+      const repo = new Repo(testRepoUri, clonedRepoPath, cache);
+
+      // Initial fetch and cache
+      const originalHash = await repo.getCommitHash("main");
+
+      // Create new commit and update origin
+      fs.writeFileSync(path.join(testRepoPath, "file2.txt"), "New content");
+      await testRepoGit.add(".");
+      await testRepoGit.commit("New commit");
+
+      // Wait for cache expiration + git sync
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      // Fetch again - should get new hash
+      const newHash = await repo.getCommitHash("main");
+
+      // Verify update
+      expect(newHash).not.toBe(originalHash);
+      expect(newHash.length).toBe(40);
+    });
   });
 });
