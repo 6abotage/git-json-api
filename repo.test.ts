@@ -12,6 +12,7 @@ describe("Repo", () => {
   let clonedRepoPath: string;
   let testRepoUri: string;
   let testRepoGit: SimpleGit;
+  let defaultBranch: string;
 
   beforeEach(async () => {
     testRepoPath = fs.mkdtempSync(path.join(os.tmpdir(), "test-repo-"));
@@ -20,6 +21,10 @@ describe("Repo", () => {
 
     testRepoGit = simpleGit(testRepoPath);
     await testRepoGit.init();
+
+    const headRef = await testRepoGit.raw(["symbolic-ref", "--short", "HEAD"]);
+    defaultBranch = headRef.trim();
+
     await testRepoGit.addConfig("user.name", "Test User", true, "global");
     await testRepoGit.addConfig(
       "user.email",
@@ -109,14 +114,13 @@ describe("Repo", () => {
     );
     expect(fs.existsSync(filePath)).toBe(true);
   });
-
   describe("Caching", () => {
     test("should return cached commit hash", async () => {
       const cache = new MemoryCache(60);
       const repo = new Repo(testRepoUri, clonedRepoPath, cache);
 
-      const hash1 = await repo.getCommitHash("main");
-      const hash2 = await repo.getCommitHash("main");
+      const hash1 = await repo.getCommitHash(defaultBranch); // Use dynamic branch
+      const hash2 = await repo.getCommitHash(defaultBranch);
 
       expect(hash1).toBe(hash2);
     });
@@ -125,21 +129,16 @@ describe("Repo", () => {
       const cache = new MemoryCache(1);
       const repo = new Repo(testRepoUri, clonedRepoPath, cache);
 
-      // Initial fetch and cache
-      const originalHash = await repo.getCommitHash("main");
+      const originalHash = await repo.getCommitHash(defaultBranch); // Use dynamic branch
 
-      // Create new commit and update origin
       fs.writeFileSync(path.join(testRepoPath, "file2.txt"), "New content");
       await testRepoGit.add(".");
       await testRepoGit.commit("New commit");
 
-      // Wait for cache expiration + git sync
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      // Fetch again - should get new hash
-      const newHash = await repo.getCommitHash("main");
+      const newHash = await repo.getCommitHash(defaultBranch); // Use dynamic branch
 
-      // Verify update
       expect(newHash).not.toBe(originalHash);
       expect(newHash.length).toBe(40);
     });
